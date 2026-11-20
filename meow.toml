@@ -1,0 +1,32 @@
+[project]
+name = "SmartTransport"
+kind = "app"
+archs = ["armv7"]
+min_ios = "5.0"
+src = ["ios6/src/*.m"]
+cflags = ["-O2", "-Wall", "-Wextra", "-Wno-unused-parameter", "-fblocks", "-fobjc-exceptions"]
+frameworks = ["Foundation", "UIKit", "MapKit", "CoreLocation", "QuartzCore", "CoreGraphics", "SystemConfiguration"]
+arc = false
+strip = true
+info_plist = "ios6/Info.plist"
+resources = "ios6/resources"
+bundle = "SmartTransport"
+
+[icons.smart]
+master = "ios6/art/IconMaster.png"
+out = "ios6/resources"
+preset = "ios"
+round = 0.18
+drop_alpha = true
+
+[launch.smart]
+out = "ios6/resources"
+background = "#f5f5f5"
+icon = "ios6/art/IconMaster.png"
+icon_points = 96
+icon_round = 0.18
+images = [
+  { name = "Default.png", width = 320, height = 480, scale = 1 },
+  { name = "Default@2x.png", width = 320, height = 480, scale = 2 },
+  { name = "Default-568h@2x.png", width = 320, height = 568, scale = 2 },
+]
