@@ -215,7 +215,7 @@
     CGFloat tabWidth = root.bounds.size.width / 4.0;
     UIButton *mapTab = [self tabButtonWithTitle:@"Карта" imageName:@"tab-map.png" tag:0 action:@selector(selectMapTab) width:tabWidth];
     UIButton *routesTab = [self tabButtonWithTitle:@"Маршруты" imageName:@"tab-routes.png" tag:1 action:@selector(showRoutes) width:tabWidth];
-    UIButton *settingsTab = [self tabButtonWithTitle:@"Настройки" imageName:@"tab-settings.png" tag:2 action:@selector(showSettings) width:tabWidth];
+    UIButton *settingsTab = [self tabButtonWithTitle:@"Настройки" imageName:@"tab-settings.png" tag:2 action:@selector(showMenu) width:tabWidth];
     UIButton *favoritesTab = [self tabButtonWithTitle:@"Избранное" imageName:@"tab-favorites.png" tag:3 action:@selector(showFavorites) width:tabWidth];
     self.bottomTabButtons = [NSArray arrayWithObjects:mapTab, routesTab, settingsTab, favoritesTab, nil];
     for (UIButton *button in self.bottomTabButtons) [self.bottomTabBar addSubview:button];
