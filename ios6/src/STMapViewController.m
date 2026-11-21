@@ -10,6 +10,7 @@
 #import "STVehicleAnnotationView.h"
 #import "STVehicleScheduleViewController.h"
 #import <QuartzCore/QuartzCore.h>
+#import <float.h>
 
 @interface STMapViewController ()
 @property(nonatomic, retain) MKMapView *mapView;
@@ -28,6 +29,9 @@
 @property(nonatomic, assign) NSInteger vehicleAnimationKey;
 @property(nonatomic, assign) NSInteger vehicleGeneration;
 @property(nonatomic, assign) BOOL vehicleRequestInFlight;
+@property(nonatomic, assign) BOOL mapIsVisible;
+@property(nonatomic, assign) BOOL snapNextVehicleUpdate;
+@property(nonatomic, assign) NSTimeInterval lastVehicleUpdateAt;
 @end
 
 @implementation STMapViewController
@@ -48,6 +52,9 @@
 @synthesize vehicleAnimationKey = _vehicleAnimationKey;
 @synthesize vehicleGeneration = _vehicleGeneration;
 @synthesize vehicleRequestInFlight = _vehicleRequestInFlight;
+@synthesize mapIsVisible = _mapIsVisible;
+@synthesize snapNextVehicleUpdate = _snapNextVehicleUpdate;
+@synthesize lastVehicleUpdateAt = _lastVehicleUpdateAt;
 
 - (id)init {
     self = [super init];
@@ -164,6 +171,12 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    self.mapIsVisible = YES;
+    NSTimeInterval now = CACurrentMediaTime();
+    if (self.lastVehicleUpdateAt <= 0.0 || now - self.lastVehicleUpdateAt > 7.0) {
+        self.snapNextVehicleUpdate = YES;
+        self.vehicleAnimationKey = 0;
+    }
     [self updateTitle];
     [self applyMapTheme];
     [self updateStationToggleButton];
@@ -175,6 +188,7 @@
 
 - (void)viewWillDisappear:(BOOL)animated {
     [super viewWillDisappear:animated];
+    self.mapIsVisible = NO;
     [self.vehicleTimer invalidate];
     self.vehicleTimer = nil;
     self.vehicleGeneration++;
@@ -409,6 +423,30 @@
     return [NSValue value:&coordinate withObjCType:@encode(CLLocationCoordinate2D)];
 }
 
+- (CLLocationCoordinate2D)visualCoordinateForAnnotation:(STAnnotation *)annotation {
+    MKAnnotationView *view = [self.mapView viewForAnnotation:annotation];
+    CALayer *presentation = (CALayer *)[view.layer presentationLayer];
+    if (view && presentation) {
+        return [self.mapView convertPoint:presentation.position toCoordinateFromView:view.superview];
+    }
+    return annotation.coordinate;
+}
+
+- (double)forwardProjectionFrom:(CLLocationCoordinate2D)current
+                              to:(CLLocationCoordinate2D)target
+                     motionStart:(CLLocationCoordinate2D)motionStart
+                       motionEnd:(CLLocationCoordinate2D)motionEnd {
+    double latitudeRadians = current.latitude * M_PI / 180.0;
+    double scale = cos(latitudeRadians);
+    double motionNorth = (motionEnd.latitude - motionStart.latitude) * 111320.0;
+    double motionEast = (motionEnd.longitude - motionStart.longitude) * 111320.0 * scale;
+    double length = sqrt(motionNorth * motionNorth + motionEast * motionEast);
+    if (length < 1.0) return 0.0;
+    double targetNorth = (target.latitude - current.latitude) * 111320.0;
+    double targetEast = (target.longitude - current.longitude) * 111320.0 * scale;
+    return (targetNorth * motionNorth + targetEast * motionEast) / length;
+}
+
 - (NSString *)destinationForVehicle:(NSDictionary *)vehicle {
     NSDictionary *route = [[STStore sharedStore] routeWithID:STInteger([vehicle objectForKey:@"rid"])];
     NSString *destination = STString([route objectForKey:@"to_station_name"]);
@@ -498,6 +536,7 @@
 }
 
 - (void)applyVehiclePayload:(NSArray *)vehicles atTime:(NSTimeInterval)time {
+    BOOL snap = self.snapNextVehicleUpdate;
     NSMutableArray *newAnnotations = [NSMutableArray array];
     for (NSDictionary *rawVehicle in vehicles) {
         NSString *identifier = STString([rawVehicle objectForKey:@"id"]);
@@ -511,6 +550,14 @@
         [vehicle setObject:destination forKey:@"_destination"];
         NSString *routeNumber = STString([vehicle objectForKey:@"rnum"]);
         NSString *title = [NSString stringWithFormat:@"%@ №%@ → %@", STTransportName(STString([vehicle objectForKey:@"rtype"])), routeNumber, destination];
+        STAnnotation *annotation = [self.vehicleAnnotationsByID objectForKey:identifier];
+        CLLocationCoordinate2D oldBaseCoordinate = finalCoordinate;
+        CLLocationCoordinate2D visualCoordinate = finalCoordinate;
+        if (annotation) {
+            oldBaseCoordinate = [self unmaskedCoordinateWithLatitude:[annotation.data objectForKey:@"lat"]
+                                                            longitude:[annotation.data objectForKey:@"lng"]];
+            visualCoordinate = [self visualCoordinateForAnnotation:annotation];
+        }
         NSMutableArray *path = [NSMutableArray array];
         NSMutableArray *weights = [NSMutableArray array];
         NSArray *animationPoints = [vehicle objectForKey:@"anim_points"];
@@ -523,20 +570,50 @@
                 [weights addObject:[NSNumber numberWithDouble:MAX(1.0, STDouble([point objectForKey:@"percent"]))]];
             }
         }
-        [path addObject:[self valueWithCoordinate:finalCoordinate]];
-        [weights addObject:[NSNumber numberWithDouble:1.0]];
+        // anim_points are already an ordered prediction beyond the reported
+        // base position. Appending the base after them makes every vehicle run
+        // to the prediction and then jump backwards.
+        if (!path.count) {
+            [path addObject:[self valueWithCoordinate:finalCoordinate]];
+            [weights addObject:[NSNumber numberWithDouble:100.0]];
+        }
 
-        STAnnotation *annotation = [self.vehicleAnnotationsByID objectForKey:identifier];
+        if (annotation && !snap && path.count) {
+            double motionLength = MKMetersBetweenMapPoints(MKMapPointForCoordinate(oldBaseCoordinate), MKMapPointForCoordinate(finalCoordinate));
+            NSUInteger nearestIndex = NSNotFound;
+            double nearestDistance = DBL_MAX;
+            NSUInteger pointIndex;
+            for (pointIndex = 0; pointIndex < path.count; pointIndex++) {
+                CLLocationCoordinate2D pointCoordinate;
+                [[path objectAtIndex:pointIndex] getValue:&pointCoordinate];
+                double forward = [self forwardProjectionFrom:visualCoordinate to:pointCoordinate
+                                                 motionStart:oldBaseCoordinate motionEnd:finalCoordinate];
+                if (motionLength >= 1.0 && forward < -2.0) continue;
+                double distance = MKMetersBetweenMapPoints(MKMapPointForCoordinate(visualCoordinate), MKMapPointForCoordinate(pointCoordinate));
+                if (distance < nearestDistance) {
+                    nearestDistance = distance;
+                    nearestIndex = pointIndex;
+                }
+            }
+            if (nearestIndex == NSNotFound) {
+                [path removeAllObjects];
+                [weights removeAllObjects];
+            } else if (nearestIndex > 0) {
+                [path removeObjectsInRange:NSMakeRange(0, nearestIndex)];
+                [weights removeObjectsInRange:NSMakeRange(0, nearestIndex)];
+            }
+        }
+
         if (!annotation) {
             CLLocationCoordinate2D initial = finalCoordinate;
-            if (path.count) [[path objectAtIndex:0] getValue:&initial];
+            if (!snap && path.count) [[path objectAtIndex:0] getValue:&initial];
             annotation = [STAnnotation annotationWithCoordinate:initial title:title
                                                         subtitle:STString([vehicle objectForKey:@"gos_num"])
                                                             data:vehicle kind:STAnnotationKindVehicle];
             [self.vehicleAnnotationsByID setObject:annotation forKey:identifier];
             [self.vehicleAnnotations addObject:annotation];
             [newAnnotations addObject:annotation];
-            if (path.count > 1) {
+            if (!snap && path.count > 1) {
                 [path removeObjectAtIndex:0];
                 [weights removeObjectAtIndex:0];
             }
@@ -546,7 +623,12 @@
             annotation.data = vehicle;
         }
         annotation.lastSeenAt = time;
-        if (path.count) [annotation beginMovementAlongPath:path weights:weights duration:4.8 atTime:time];
+        if (snap) {
+            annotation.coordinate = finalCoordinate;
+            [annotation finishMovement];
+        } else if (path.count) {
+            [annotation beginMovementAlongPath:path weights:weights duration:6.2 atTime:time];
+        }
 
         STVehicleAnnotationView *view = (STVehicleAnnotationView *)[self.mapView viewForAnnotation:annotation];
         if ([view isKindOfClass:[STVehicleAnnotationView class]]) [view configureWithVehicle:vehicle];
@@ -555,14 +637,18 @@
     }
     if (newAnnotations.count) [self.mapView addAnnotations:newAnnotations];
     [self removeStaleVehiclesAtTime:time];
+    self.lastVehicleUpdateAt = time;
+    self.snapNextVehicleUpdate = NO;
     // Give MapKit one run-loop turn to create views for new annotations, then
     // hand movement to Core Animation. No per-frame Objective-C loop is used.
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(startPendingVehicleAnimations) object:nil];
-    [self performSelector:@selector(startPendingVehicleAnimations) withObject:nil afterDelay:0.0];
+    if (!snap) {
+        [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(startPendingVehicleAnimations) object:nil];
+        [self performSelector:@selector(startPendingVehicleAnimations) withObject:nil afterDelay:0.0];
+    }
 }
 
 - (void)refreshVehicles {
-    if ([STStore sharedStore].routes.count == 0 || self.vehicleRequestInFlight) return;
+    if (!self.mapIsVisible || [STStore sharedStore].routes.count == 0 || self.vehicleRequestInFlight) return;
     NSString *routeIDs = [self visibleRouteIDs];
     if (!routeIDs.length) {
         [self clearVehicleAnnotations];

@@ -168,6 +168,10 @@
 - (NSArray *)favoriteRouteIDs { return [[NSUserDefaults standardUserDefaults] arrayForKey:[self preferenceKey:@"STFavoriteRoutes"]] ?: [NSArray array]; }
 - (BOOL)isFavoriteRoute:(NSInteger)identifier { return [self array:[self favoriteRouteIDs] containsID:identifier]; }
 - (void)toggleFavoriteRoute:(NSInteger)identifier { [self toggleID:identifier key:[self preferenceKey:@"STFavoriteRoutes"] maximum:0]; }
+- (void)setFavoriteRouteIDs:(NSArray *)identifiers {
+    [[NSUserDefaults standardUserDefaults] setObject:(identifiers ?: [NSArray array]) forKey:[self preferenceKey:@"STFavoriteRoutes"]];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
 
 - (NSArray *)visibleRouteIDs {
     NSString *key = [self preferenceKey:@"STVisibleRoutes"];

@@ -26,6 +26,7 @@ typedef void (^STStoreCompletion)(NSError *error);
 - (BOOL)isFavoriteRoute:(NSInteger)identifier;
 - (void)toggleFavoriteRoute:(NSInteger)identifier;
 - (NSArray *)favoriteRouteIDs;
+- (void)setFavoriteRouteIDs:(NSArray *)identifiers;
 
 - (NSArray *)visibleRouteIDs;
 - (void)setVisibleRouteIDs:(NSArray *)identifiers;
