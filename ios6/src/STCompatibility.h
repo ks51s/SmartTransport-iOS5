@@ -7,7 +7,6 @@
 #define STStoreCityDidChangeNotification @"STStoreCityDidChangeNotification"
 #define STMapTypeDidChangeNotification @"STMapTypeDidChangeNotification"
 #define STStationVisibilityDidChangeNotification @"STStationVisibilityDidChangeNotification"
-#define STStationSpacingDidChangeNotification @"STStationSpacingDidChangeNotification"
 #define STVisibleRoutesDidChangeNotification @"STVisibleRoutesDidChangeNotification"
 #define STThemeDidChangeNotification @"STThemeDidChangeNotification"
 

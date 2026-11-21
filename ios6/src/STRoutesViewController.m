@@ -6,6 +6,8 @@
 @interface STRoutesViewController ()
 @property(nonatomic, retain) NSArray *sections;
 @property(nonatomic, retain) UISearchBar *searchBar;
+@property(nonatomic, retain) NSMutableSet *workingVisibleRouteIDs;
+@property(nonatomic, assign) BOOL selectionDirty;
 @end
 
 @implementation STRoutesViewController
@@ -14,6 +16,8 @@
 @synthesize favoritesOnly = _favoritesOnly;
 @synthesize sections = _sections;
 @synthesize searchBar = _searchBar;
+@synthesize workingVisibleRouteIDs = _workingVisibleRouteIDs;
+@synthesize selectionDirty = _selectionDirty;
 
 - (id)initWithFavoritesOnly:(BOOL)favoritesOnly {
     self = [super initWithStyle:UITableViewStylePlain];
@@ -51,12 +55,26 @@
 
 - (void)viewWillAppear:(BOOL)animated {
     [super viewWillAppear:animated];
+    if (!self.workingVisibleRouteIDs) {
+        self.workingVisibleRouteIDs = [NSMutableSet setWithArray:[[STStore sharedStore] visibleRouteIDs]];
+    }
     STApplyNavigationTheme(self.navigationController);
     STApplyTableTheme(self.tableView);
     STApplySearchBarTheme(self.searchBar);
     UILabel *hint = (UILabel *)self.tableView.tableFooterView;
     hint.textColor = STDarkThemeEnabled() ? [UIColor colorWithWhite:0.68 alpha:1.0] : [UIColor colorWithWhite:0.48 alpha:1.0];
     [self rebuildSections];
+}
+
+- (void)viewWillDisappear:(BOOL)animated {
+    [super viewWillDisappear:animated];
+    [self commitRouteSelection];
+}
+
+- (void)commitRouteSelection {
+    if (!self.selectionDirty) return;
+    [[STStore sharedStore] setVisibleRouteIDs:[self.workingVisibleRouteIDs allObjects]];
+    self.selectionDirty = NO;
 }
 
 - (NSInteger)categoryForRoute:(NSDictionary *)route {
@@ -129,7 +147,7 @@
 }
 
 - (BOOL)anyRouteVisibleInRoutes:(NSArray *)routes {
-    NSSet *visible = [NSSet setWithArray:[[STStore sharedStore] visibleRouteIDs]];
+    NSSet *visible = self.workingVisibleRouteIDs ?: [NSSet setWithArray:[[STStore sharedStore] visibleRouteIDs]];
     for (NSDictionary *route in routes) {
         if ([visible containsObject:[NSNumber numberWithInteger:STInteger([route objectForKey:@"id"])]]) return YES;
     }
@@ -256,14 +274,15 @@
 }
 
 - (void)setRoutes:(NSArray *)routes visible:(BOOL)shouldShow {
-    NSMutableArray *visible = [[[STStore sharedStore] visibleRouteIDs] mutableCopy];
+    if (!self.workingVisibleRouteIDs) {
+        self.workingVisibleRouteIDs = [NSMutableSet setWithArray:[[STStore sharedStore] visibleRouteIDs]];
+    }
     for (NSDictionary *route in routes) {
         NSNumber *identifier = [NSNumber numberWithInteger:STInteger([route objectForKey:@"id"])];
-        [visible removeObject:identifier];
-        if (shouldShow) [visible addObject:identifier];
+        [self.workingVisibleRouteIDs removeObject:identifier];
+        if (shouldShow) [self.workingVisibleRouteIDs addObject:identifier];
     }
-    [[STStore sharedStore] setVisibleRouteIDs:visible];
-    [visible release];
+    self.selectionDirty = YES;
 }
 
 - (void)routeButtonPressed:(UIButton *)button {
@@ -272,7 +291,6 @@
     BOOL enable = ![self groupIsVisible:route];
     [self setRoutes:[self routesInGroup:route] visible:enable];
     [self styleRouteButton:button route:route enabled:enable];
-    [self.tableView reloadData];
 }
 
 - (void)routeButtonHeld:(UILongPressGestureRecognizer *)recognizer {
@@ -280,6 +298,7 @@
     UIButton *button = (UIButton *)recognizer.view;
     NSDictionary *route = [self routeForButtonTag:button.tag];
     if (route && [self.delegate respondsToSelector:@selector(routesViewController:selectedRoute:)]) {
+        [self commitRouteSelection];
         [self.delegate routesViewController:self selectedRoute:route];
         [self.navigationController popToRootViewControllerAnimated:YES];
     }
@@ -292,7 +311,7 @@
 }
 
 - (void)saveEnabledAsFavorites {
-    NSArray *visible = [[STStore sharedStore] visibleRouteIDs];
+    NSArray *visible = [self.workingVisibleRouteIDs allObjects];
     [[STStore sharedStore] setFavoriteRouteIDs:visible];
     if (self.favoritesOnly) [self rebuildSections];
     NSMutableSet *groups = [NSMutableSet set];
@@ -311,6 +330,7 @@
 - (void)dealloc {
     [_sections release];
     [_searchBar release];
+    [_workingVisibleRouteIDs release];
     [super dealloc];
 }
 

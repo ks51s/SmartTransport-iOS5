@@ -88,7 +88,7 @@
 }
 
 - (NSString *)arrivalTextForSeconds:(NSInteger)seconds {
-    if (seconds <= 30) return @"сейчас";
+    if (seconds < 60) return @"меньше 1 минуты";
     NSInteger minutes = MAX(1, seconds / 60);
     NSDate *date = [NSDate dateWithTimeIntervalSinceNow:seconds];
     NSDateFormatter *formatter = [[[NSDateFormatter alloc] init] autorelease];
@@ -111,9 +111,12 @@
                                STString([self.vehicle objectForKey:@"rnum"]), destination];
         NSMutableArray *details = [NSMutableArray array];
         NSString *plate = STString([self.vehicle objectForKey:@"gos_num"]);
+        long long flags = [STString([self.vehicle objectForKey:@"flags"]) longLongValue];
         if (plate.length) [details addObject:plate];
-        if ([STString([self.vehicle objectForKey:@"low_floor"]) isEqualToString:@"1"]) [details addObject:@"низкопольный"];
-        if ([STString([self.vehicle objectForKey:@"wifi"]) isEqualToString:@"1"]) [details addObject:@"Wi‑Fi"];
+        if ([STString([self.vehicle objectForKey:@"low_floor"]) isEqualToString:@"1"] || (flags & 1LL)) [details addObject:@"низкопольный"];
+        if ([STString([self.vehicle objectForKey:@"wifi"]) isEqualToString:@"1"] || (flags & 4LL)) [details addObject:@"Wi‑Fi"];
+        if (flags & 16LL) [details addObject:@"кондиционер"];
+        if (flags & 32LL) [details addObject:@"место для коляски"];
         cell.detailTextLabel.text = [details componentsJoinedByString:@" · "];
         return cell;
     }

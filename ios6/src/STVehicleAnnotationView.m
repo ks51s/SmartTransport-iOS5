@@ -4,87 +4,115 @@
 
 @synthesize routeNumber = _routeNumber;
 @synthesize transportType = _transportType;
+@synthesize featureText = _featureText;
 @synthesize direction = _direction;
+@synthesize showFeatureFlag = _showFeatureFlag;
 
 - (id)initWithAnnotation:(id<MKAnnotation>)annotation reuseIdentifier:(NSString *)reuseIdentifier {
     self = [super initWithAnnotation:annotation reuseIdentifier:reuseIdentifier];
     if (self) {
-        self.frame = CGRectMake(0, 0, 44, 44);
+        self.frame = CGRectMake(0, 0, 88, 52);
         self.backgroundColor = [UIColor clearColor];
         self.opaque = NO;
         self.canShowCallout = NO;
-        self.centerOffset = CGPointZero;
+        // Marker center is x=24; remaining width holds the optional flag.
+        self.centerOffset = CGPointMake(20, 0);
     }
     return self;
 }
 
-- (UIColor *)markerColor {
-    // Original SmartTransport transport colors.
-    if ([self.transportType isEqualToString:@"Т"] || [self.transportType isEqualToString:@"Тб"]) {
-        return [UIColor colorWithRed:0.00 green:0.667 blue:0.741 alpha:1.0];
-    }
-    if ([self.transportType isEqualToString:@"Тр"] || [self.transportType isEqualToString:@"Тм"] || [self.transportType isEqualToString:@"Мор"]) {
-        return [UIColor colorWithRed:0.204 green:0.659 blue:0.325 alpha:1.0];
-    }
-    if ([self.transportType isEqualToString:@"М"] || [self.transportType isEqualToString:@"Мт"]) {
-        return [UIColor colorWithRed:0.988 green:0.694 blue:0.00 alpha:1.0];
-    }
-    return [UIColor colorWithRed:1.00 green:0.153 blue:0.110 alpha:1.0];
+- (NSString *)markerImageName {
+    if ([self.transportType isEqualToString:@"Т"] || [self.transportType isEqualToString:@"Тб"]) return @"vehicle-trolley.png";
+    if ([self.transportType isEqualToString:@"Тр"] || [self.transportType isEqualToString:@"Тм"] || [self.transportType isEqualToString:@"Мор"]) return @"vehicle-tram.png";
+    if ([self.transportType isEqualToString:@"М"] || [self.transportType isEqualToString:@"Мт"]) return @"vehicle-minibus.png";
+    return @"vehicle-bus.png";
 }
 
 - (void)configureWithVehicle:(NSDictionary *)vehicle {
+    [self configureWithVehicle:vehicle showFeatureFlag:NO];
+}
+
+- (void)configureWithVehicle:(NSDictionary *)vehicle showFeatureFlag:(BOOL)showFeatureFlag {
     self.routeNumber = STString([vehicle objectForKey:@"rnum"]);
     self.transportType = STString([vehicle objectForKey:@"rtype"]);
     self.direction = (CGFloat)STDouble([vehicle objectForKey:@"dir"]);
-    self.accessibilityLabel = [NSString stringWithFormat:@"%@ №%@, следует до %@",
+    self.showFeatureFlag = showFeatureFlag;
+
+    long long flags = [STString([vehicle objectForKey:@"flags"]) longLongValue];
+    NSMutableArray *features = [NSMutableArray array];
+    NSMutableArray *spoken = [NSMutableArray array];
+    if ([STString([vehicle objectForKey:@"low_floor"]) isEqualToString:@"1"] || (flags & 1LL)) {
+        [features addObject:@"♿"];
+        [spoken addObject:@"низкопольный"];
+    }
+    if ([STString([vehicle objectForKey:@"wifi"]) isEqualToString:@"1"] || (flags & 4LL)) {
+        [features addObject:@"Wi"];
+        [spoken addObject:@"Wi-Fi"];
+    }
+    if (flags & 16LL) {
+        [features addObject:@"❄"];
+        [spoken addObject:@"кондиционер"];
+    }
+    if (flags & 32LL) {
+        [features addObject:@"К"];
+        [spoken addObject:@"место для коляски"];
+    }
+    self.featureText = [features componentsJoinedByString:@" "];
+    NSString *featuresDescription = spoken.count
+        ? [NSString stringWithFormat:@", %@", [spoken componentsJoinedByString:@", "]] : @"";
+    self.accessibilityLabel = [NSString stringWithFormat:@"%@ №%@, следует до %@%@",
                                STTransportName(self.transportType), self.routeNumber,
-                               STString([vehicle objectForKey:@"_destination"])];
+                               STString([vehicle objectForKey:@"_destination"]), featuresDescription];
     [self setNeedsDisplay];
 }
 
 - (void)drawRect:(CGRect)rect {
     CGContextRef context = UIGraphicsGetCurrentContext();
+    CGPoint markerCenter = CGPointMake(24.0, CGRectGetMidY(rect));
+
     CGContextSaveGState(context);
-    CGContextSetShadowWithColor(context, CGSizeMake(0, 1), 1.5, [UIColor colorWithWhite:0 alpha:0.42].CGColor);
-
-    CGPoint center = CGPointMake(CGRectGetMidX(rect), CGRectGetMidY(rect));
-    CGFloat radius = 13.5;
-    CGFloat radians = (self.direction - 90.0) * (CGFloat)M_PI / 180.0;
-    CGFloat dx = cosf(radians);
-    CGFloat dy = sinf(radians);
-    CGFloat px = -dy;
-    CGFloat py = dx;
-    CGPoint base = CGPointMake(center.x + dx * (radius - 4.0), center.y + dy * (radius - 4.0));
-    CGPoint tip = CGPointMake(center.x + dx * (radius + 7.0), center.y + dy * (radius + 7.0));
-    CGPoint left = CGPointMake(base.x + px * 7.0, base.y + py * 7.0);
-    CGPoint right = CGPointMake(base.x - px * 7.0, base.y - py * 7.0);
-
-    UIColor *color = [self markerColor];
-    [color setFill];
-    [[UIColor colorWithWhite:0.18 alpha:0.72] setStroke];
-    CGContextSetLineWidth(context, 1.25);
-    CGContextBeginPath(context);
-    CGContextMoveToPoint(context, tip.x, tip.y);
-    CGContextAddLineToPoint(context, left.x, left.y);
-    CGContextAddLineToPoint(context, right.x, right.y);
-    CGContextClosePath(context);
-    CGContextDrawPath(context, kCGPathFillStroke);
-
-    CGContextFillEllipseInRect(context, CGRectMake(center.x - radius, center.y - radius, radius * 2.0, radius * 2.0));
-    CGContextStrokeEllipseInRect(context, CGRectMake(center.x - radius, center.y - radius, radius * 2.0, radius * 2.0));
+    CGContextTranslateCTM(context, markerCenter.x, markerCenter.y);
+    // Original marker points upward, while API direction uses compass degrees.
+    CGContextRotateCTM(context, self.direction * (CGFloat)M_PI / 180.0);
+    [[UIImage imageNamed:[self markerImageName]] drawInRect:CGRectMake(-22.0, -22.0, 44.0, 44.0)];
     CGContextRestoreGState(context);
 
     CGFloat fontSize = self.routeNumber.length >= 4 ? 9.0 : (self.routeNumber.length == 3 ? 10.5 : 13.0);
     [[UIColor colorWithWhite:0.05 alpha:1.0] setFill];
-    [self.routeNumber drawInRect:CGRectMake(center.x - radius + 1.0, center.y - 8.0, radius * 2.0 - 2.0, 17.0)
+    [self.routeNumber drawInRect:CGRectMake(markerCenter.x - 13.0, markerCenter.y - 8.0, 26.0, 17.0)
                          withFont:[UIFont boldSystemFontOfSize:fontSize]
                     lineBreakMode:NSLineBreakByClipping
                         alignment:NSTextAlignmentCenter];
+
+    if (self.showFeatureFlag && self.featureText.length) {
+        CGFloat width = MIN(42.0, MAX(24.0, self.featureText.length * 7.0 + 8.0));
+        CGRect flagRect = CGRectMake(39.0, 7.0, width, 20.0);
+        UIBezierPath *flag = [UIBezierPath bezierPathWithRoundedRect:flagRect cornerRadius:3.0];
+        [[UIColor colorWithWhite:1.0 alpha:0.94] setFill];
+        [[UIColor colorWithWhite:0.18 alpha:0.85] setStroke];
+        flag.lineWidth = 1.0;
+        [flag fill];
+        [flag stroke];
+
+        CGContextBeginPath(context);
+        CGContextMoveToPoint(context, 39.0, 11.0);
+        CGContextAddLineToPoint(context, 34.0, 15.0);
+        CGContextAddLineToPoint(context, 39.0, 19.0);
+        CGContextClosePath(context);
+        CGContextDrawPath(context, kCGPathFillStroke);
+
+        [[UIColor colorWithWhite:0.08 alpha:1.0] setFill];
+        [self.featureText drawInRect:CGRectInset(flagRect, 3.0, 3.0)
+                            withFont:[UIFont boldSystemFontOfSize:9.0]
+                       lineBreakMode:NSLineBreakByClipping
+                           alignment:NSTextAlignmentCenter];
+    }
 }
 
 - (void)dealloc {
     [_routeNumber release];
     [_transportType release];
+    [_featureText release];
     [super dealloc];
 }
 

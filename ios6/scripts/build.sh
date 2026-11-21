@@ -8,5 +8,8 @@ export MEOW_SDK_ARMV7="${MEOW_SDK_ARMV7:-$HOME/ios6-tooling/sdks/iPhoneOS6.1.sdk
 
 cd "$ROOT"
 "$MEOW" doctor
-"$MEOW" build icons-smart launch-smart
+"$MEOW" build icons-smart launch-smart \
+	image-vehicle-bus image-vehicle-trolley image-vehicle-tram image-vehicle-minibus \
+	image-navposition image-location-button image-route-close image-zoom-plus image-zoom-minus \
+	image-tab-map image-tab-routes image-tab-favorites image-tab-settings
 "$MEOW" build SmartTransport-ipa "$@"

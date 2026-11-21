@@ -6,10 +6,6 @@
 @interface STAboutViewController : UIViewController
 @end
 
-@interface STStationSpacingViewController : UITableViewController
-@property(nonatomic, retain) NSArray *values;
-@end
-
 @implementation STSettingsViewController
 
 - (id)init {
@@ -28,7 +24,7 @@
 - (NSInteger)numberOfSectionsInTableView:(UITableView *)tableView { return 4; }
 - (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section {
     if (section == 0) return 2;
-    if (section == 1) return 3;
+    if (section == 1) return 2;
     if (section == 2) return 1;
     return 2;
 }
@@ -63,20 +59,13 @@
         [segments addTarget:self action:@selector(mapTypeChanged:) forControlEvents:UIControlEventValueChanged];
         cell.accessoryView = segments;
     } else if (indexPath.section == 1) {
-        if (indexPath.row == 1) {
-            cell.textLabel.text = @"Значки остановок";
-            cell.selectionStyle = UITableViewCellSelectionStyleNone;
-            UISwitch *stationSwitch = [[[UISwitch alloc] initWithFrame:CGRectZero] autorelease];
-            stationSwitch.on = STStationIconsEnabled();
-            [stationSwitch addTarget:self action:@selector(stationIconsChanged:) forControlEvents:UIControlEventValueChanged];
-            stationSwitch.accessibilityLabel = @"Показывать фиолетовые значки остановок";
-            cell.accessoryView = stationSwitch;
-        } else {
-            cell.textLabel.text = @"Разреживание (БЕТА)";
-            NSInteger spacing = STStationSpacingMeters();
-            cell.detailTextLabel.text = spacing ? [NSString stringWithFormat:@"%ld м", (long)spacing] : @"Все";
-            cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
-        }
+        cell.selectionStyle = UITableViewCellSelectionStyleNone;
+        UISwitch *stationSwitch = [[[UISwitch alloc] initWithFrame:CGRectZero] autorelease];
+        cell.textLabel.text = @"Значки остановок";
+        stationSwitch.on = STStationIconsEnabled();
+        [stationSwitch addTarget:self action:@selector(stationIconsChanged:) forControlEvents:UIControlEventValueChanged];
+        stationSwitch.accessibilityLabel = @"Показывать остановки при приближении карты";
+        cell.accessoryView = stationSwitch;
     } else if (indexPath.section == 2) {
         cell.textLabel.text = @"Тема";
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
@@ -129,8 +118,6 @@
             if (error) STShowError(self, [error localizedDescription]);
             else [self.tableView reloadData];
         }];
-    } else if (indexPath.section == 1 && indexPath.row == 2) {
-        [self.navigationController pushViewController:[[[STStationSpacingViewController alloc] init] autorelease] animated:YES];
     } else if (indexPath.section == 3 && indexPath.row == 0) {
         [[STStore sharedStore] clearCache];
         [self.tableView reloadData];
@@ -139,55 +126,6 @@
     } else if (indexPath.section == 3 && indexPath.row == 1) {
         [self.navigationController pushViewController:[[[STAboutViewController alloc] init] autorelease] animated:YES];
     }
-}
-
-@end
-
-@implementation STStationSpacingViewController
-
-@synthesize values = _values;
-
-- (id)init {
-    self = [super initWithStyle:UITableViewStyleGrouped];
-    if (self) {
-        self.title = @"Остановки (БЕТА)";
-        self.values = [NSArray arrayWithObjects:@0, @25, @50, @75, @100, @125, @150, @175, @200, @225, @250, nil];
-    }
-    return self;
-}
-
-- (void)viewWillAppear:(BOOL)animated {
-    [super viewWillAppear:animated];
-    STApplyNavigationTheme(self.navigationController);
-    STApplyTableTheme(self.tableView);
-}
-
-- (NSInteger)tableView:(UITableView *)tableView numberOfRowsInSection:(NSInteger)section { return self.values.count; }
-- (NSString *)tableView:(UITableView *)tableView titleForHeaderInSection:(NSInteger)section { return @"Минимальное расстояние между значками"; }
-- (NSString *)tableView:(UITableView *)tableView titleForFooterInSection:(NSInteger)section {
-    return @"БЕТА: близкие остановки объединяются визуально — из каждой группы остаётся один значок. Сами остановки и поиск не удаляются.";
-}
-
-- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
-    static NSString *identifier = @"StationSpacingCell";
-    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:identifier];
-    if (!cell) cell = [[[UITableViewCell alloc] initWithStyle:UITableViewCellStyleDefault reuseIdentifier:identifier] autorelease];
-    STApplyCellTheme(cell);
-    NSInteger value = [[self.values objectAtIndex:indexPath.row] integerValue];
-    cell.textLabel.text = value ? [NSString stringWithFormat:@"%ld метров", (long)value] : @"Показывать все";
-    cell.accessoryType = value == STStationSpacingMeters() ? UITableViewCellAccessoryCheckmark : UITableViewCellAccessoryNone;
-    return cell;
-}
-
-- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
-    [tableView deselectRowAtIndexPath:indexPath animated:YES];
-    STSetStationSpacingMeters([[self.values objectAtIndex:indexPath.row] integerValue]);
-    [self.navigationController popViewControllerAnimated:YES];
-}
-
-- (void)dealloc {
-    [_values release];
-    [super dealloc];
 }
 
 @end

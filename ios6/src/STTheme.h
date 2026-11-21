@@ -8,8 +8,6 @@ typedef enum {
 
 BOOL STStationIconsEnabled(void);
 void STSetStationIconsEnabled(BOOL enabled);
-NSInteger STStationSpacingMeters(void);
-void STSetStationSpacingMeters(NSInteger meters);
 
 STThemeStyle STCurrentThemeStyle(void);
 void STSetThemeStyle(STThemeStyle style);

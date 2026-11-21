@@ -1,7 +1,6 @@
 #import "STTheme.h"
 
 static NSString *const STStationIconsKey = @"STShowStationIcons";
-static NSString *const STStationSpacingKey = @"STStationSpacingMeters";
 static NSString *const STThemeStyleKey = @"STThemeStyle";
 
 BOOL STStationIconsEnabled(void) {
@@ -16,21 +15,6 @@ void STSetStationIconsEnabled(BOOL enabled) {
     [defaults setBool:enabled forKey:STStationIconsKey];
     [defaults synchronize];
     [[NSNotificationCenter defaultCenter] postNotificationName:STStationVisibilityDidChangeNotification object:nil];
-}
-
-NSInteger STStationSpacingMeters(void) {
-    NSInteger value = [[NSUserDefaults standardUserDefaults] integerForKey:STStationSpacingKey];
-    if (value < 0 || value > 250 || (value % 25) != 0) return 0;
-    return value;
-}
-
-void STSetStationSpacingMeters(NSInteger meters) {
-    meters = MAX(0, MIN(250, meters));
-    meters = (meters / 25) * 25;
-    NSUserDefaults *defaults = [NSUserDefaults standardUserDefaults];
-    [defaults setInteger:meters forKey:STStationSpacingKey];
-    [defaults synchronize];
-    [[NSNotificationCenter defaultCenter] postNotificationName:STStationSpacingDidChangeNotification object:nil];
 }
 
 STThemeStyle STCurrentThemeStyle(void) {
@@ -70,6 +54,8 @@ void STApplyNavigationTheme(UINavigationController *navigationController) {
     if (!navigationController) return;
     UINavigationBar *bar = navigationController.navigationBar;
     if (STDarkThemeEnabled()) {
+        bar.barStyle = UIBarStyleBlack;
+        bar.translucent = NO;
         UIColor *dark = [UIColor colorWithRed:0.09 green:0.10 blue:0.12 alpha:0.98];
         [bar setBackgroundImage:STSolidColorImage(dark) forBarMetrics:UIBarMetricsDefault];
         if ([bar respondsToSelector:@selector(setShadowImage:)]) {
@@ -81,6 +67,8 @@ void STApplyNavigationTheme(UINavigationController *navigationController) {
                                    [NSValue valueWithUIOffset:UIOffsetZero], UITextAttributeTextShadowOffset, nil];
         [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleBlackOpaque animated:YES];
     } else if (STIOS7ThemeEnabled()) {
+        bar.barStyle = UIBarStyleDefault;
+        bar.translucent = NO;
         UIColor *white = [UIColor colorWithRed:0.985 green:0.985 blue:0.99 alpha:0.98];
         [bar setBackgroundImage:STSolidColorImage(white) forBarMetrics:UIBarMetricsDefault];
         if ([bar respondsToSelector:@selector(setShadowImage:)]) {
@@ -92,6 +80,8 @@ void STApplyNavigationTheme(UINavigationController *navigationController) {
                                    [NSValue valueWithUIOffset:UIOffsetZero], UITextAttributeTextShadowOffset, nil];
         [[UIApplication sharedApplication] setStatusBarStyle:UIStatusBarStyleDefault animated:YES];
     } else {
+        bar.barStyle = UIBarStyleDefault;
+        bar.translucent = NO;
         [bar setBackgroundImage:nil forBarMetrics:UIBarMetricsDefault];
         if ([bar respondsToSelector:@selector(setShadowImage:)]) bar.shadowImage = nil;
         bar.tintColor = STTintColor();

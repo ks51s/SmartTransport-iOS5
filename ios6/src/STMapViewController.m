@@ -1,8 +1,10 @@
 #import "STMapViewController.h"
 #import "STAnnotation.h"
 #import "STForecastViewController.h"
+#import "STFavoritesViewController.h"
 #import "STStationListViewController.h"
 #import "STMenuViewController.h"
+#import "STSettingsViewController.h"
 #import "STAPIClient.h"
 #import "STStore.h"
 #import "STTheme.h"
@@ -26,6 +28,10 @@
 @property(nonatomic, retain) UILabel *statusLabel;
 @property(nonatomic, retain) NSTimer *vehicleTimer;
 @property(nonatomic, retain) UIButton *stationToggleButton;
+@property(nonatomic, retain) UIBarButtonItem *vehicleFlagsButton;
+@property(nonatomic, retain) UIView *bottomTabBar;
+@property(nonatomic, retain) NSArray *bottomTabButtons;
+@property(nonatomic, retain) UIButton *routeCloseButton;
 @property(nonatomic, assign) NSInteger vehicleAnimationKey;
 @property(nonatomic, assign) NSInteger vehicleGeneration;
 @property(nonatomic, assign) BOOL vehicleRequestInFlight;
@@ -49,6 +55,10 @@
 @synthesize statusLabel = _statusLabel;
 @synthesize vehicleTimer = _vehicleTimer;
 @synthesize stationToggleButton = _stationToggleButton;
+@synthesize vehicleFlagsButton = _vehicleFlagsButton;
+@synthesize bottomTabBar = _bottomTabBar;
+@synthesize bottomTabButtons = _bottomTabButtons;
+@synthesize routeCloseButton = _routeCloseButton;
 @synthesize vehicleAnimationKey = _vehicleAnimationKey;
 @synthesize vehicleGeneration = _vehicleGeneration;
 @synthesize vehicleRequestInFlight = _vehicleRequestInFlight;
@@ -79,6 +89,12 @@
 }
 
 - (void)styleMapControl:(UIButton *)button {
+    if (button.tag == 700) {
+        button.backgroundColor = [UIColor clearColor];
+        button.layer.borderWidth = 0.0;
+        button.layer.shadowOpacity = 0.0;
+        return;
+    }
     if (STDarkThemeEnabled()) {
         button.backgroundColor = [UIColor colorWithRed:0.08 green:0.09 blue:0.11 alpha:0.91];
         button.layer.cornerRadius = 5.0;
@@ -105,6 +121,86 @@
     }
 }
 
+- (UIImage *)tintedImageNamed:(NSString *)name color:(UIColor *)color {
+    UIImage *source = [UIImage imageNamed:name];
+    if (!source) return nil;
+    UIGraphicsBeginImageContextWithOptions(source.size, NO, source.scale);
+    CGRect rect = CGRectMake(0, 0, source.size.width, source.size.height);
+    [color setFill];
+    UIRectFill(rect);
+    [source drawInRect:rect blendMode:kCGBlendModeDestinationIn alpha:1.0];
+    UIImage *result = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return result;
+}
+
+- (UIButton *)tabButtonWithTitle:(NSString *)title imageName:(NSString *)imageName tag:(NSInteger)tag action:(SEL)action width:(CGFloat)width {
+    UIButton *button = [UIButton buttonWithType:UIButtonTypeCustom];
+    button.frame = CGRectMake(tag * width, 0, width, 58);
+    button.tag = tag;
+    [button addTarget:self action:action forControlEvents:UIControlEventTouchUpInside];
+    UIImageView *icon = [[[UIImageView alloc] initWithFrame:CGRectMake((width - 24) / 2.0, 5, 24, 24)] autorelease];
+    icon.tag = 100;
+    icon.contentMode = UIViewContentModeScaleAspectFit;
+    icon.accessibilityIdentifier = imageName;
+    [button addSubview:icon];
+    UILabel *label = [[[UILabel alloc] initWithFrame:CGRectMake(1, 31, width - 2, 20)] autorelease];
+    label.tag = 101;
+    label.backgroundColor = [UIColor clearColor];
+    label.font = [UIFont systemFontOfSize:10.5];
+    label.textAlignment = NSTextAlignmentCenter;
+    label.text = title;
+    [button addSubview:label];
+    button.accessibilityLabel = title;
+    return button;
+}
+
+- (UIImage *)classicTabBarBackgroundImage {
+    CGSize size = CGSizeMake(2.0, 58.0);
+    UIGraphicsBeginImageContextWithOptions(size, YES, 0.0);
+    CGContextRef context = UIGraphicsGetCurrentContext();
+    NSArray *colors = [NSArray arrayWithObjects:
+                       (id)[UIColor colorWithRed:0.43 green:0.68 blue:0.88 alpha:1.0].CGColor,
+                       (id)[UIColor colorWithRed:0.10 green:0.40 blue:0.68 alpha:1.0].CGColor, nil];
+    CGFloat locations[] = { 0.0, 1.0 };
+    CGColorSpaceRef colorSpace = CGColorSpaceCreateDeviceRGB();
+    CGGradientRef gradient = CGGradientCreateWithColors(colorSpace, (CFArrayRef)colors, locations);
+    CGContextDrawLinearGradient(context, gradient, CGPointMake(0, 0), CGPointMake(0, size.height), 0);
+    CGGradientRelease(gradient);
+    CGColorSpaceRelease(colorSpace);
+    UIImage *image = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return image;
+}
+
+- (void)styleBottomTabBar {
+    BOOL classic = STCurrentThemeStyle() == STThemeStyleIOS6;
+    self.bottomTabBar.layer.contents = classic ? (id)[self classicTabBarBackgroundImage].CGImage : nil;
+    self.bottomTabBar.layer.contentsGravity = kCAGravityResize;
+    self.bottomTabBar.backgroundColor = classic ? [UIColor clearColor]
+        : (STDarkThemeEnabled() ? [UIColor colorWithRed:0.07 green:0.08 blue:0.10 alpha:0.95]
+                                : [UIColor colorWithWhite:1.0 alpha:0.95]);
+    self.bottomTabBar.layer.borderColor = (STDarkThemeEnabled()
+        ? [UIColor colorWithWhite:0.28 alpha:1.0]
+        : (classic ? [UIColor colorWithRed:0.06 green:0.30 blue:0.56 alpha:1.0]
+                   : [UIColor colorWithWhite:0.72 alpha:1.0])).CGColor;
+    self.bottomTabBar.layer.borderWidth = 0.5;
+    NSArray *imageNames = [NSArray arrayWithObjects:@"tab-map.png", @"tab-routes.png", @"tab-settings.png", @"tab-favorites.png", nil];
+    NSUInteger index;
+    for (index = 0; index < self.bottomTabButtons.count; index++) {
+        UIButton *button = [self.bottomTabButtons objectAtIndex:index];
+        BOOL selected = index == 0;
+        UIColor *color = selected ? (classic ? [UIColor whiteColor] : STTintColor())
+            : (classic ? [UIColor colorWithRed:0.80 green:0.91 blue:0.98 alpha:1.0]
+                       : (STDarkThemeEnabled() ? [UIColor colorWithWhite:0.78 alpha:1.0] : [UIColor colorWithWhite:0.25 alpha:1.0]));
+        button.backgroundColor = selected && classic ? [UIColor colorWithWhite:0.0 alpha:0.18] : [UIColor clearColor];
+        UIImageView *icon = (UIImageView *)[button viewWithTag:100];
+        icon.image = [self tintedImageNamed:[imageNames objectAtIndex:index] color:color];
+        UILabel *label = (UILabel *)[button viewWithTag:101];
+        label.textColor = color;
+    }
+}
+
 - (void)loadView {
     UIView *root = [[[UIView alloc] initWithFrame:[[UIScreen mainScreen] applicationFrame]] autorelease];
     root.backgroundColor = [UIColor whiteColor];
@@ -114,19 +210,43 @@
     self.mapView.showsUserLocation = YES;
     [root addSubview:self.mapView];
 
-    UIButton *routes = [self controlButtonWithTitle:@"Маршруты" action:@selector(showRoutes)];
-    routes.frame = CGRectMake(10, root.bounds.size.height - 54, 92, 44);
-    routes.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleRightMargin;
-    [root addSubview:routes];
+    self.bottomTabBar = [[[UIView alloc] initWithFrame:CGRectMake(0, root.bounds.size.height - 58, root.bounds.size.width, 58)] autorelease];
+    self.bottomTabBar.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleWidth;
+    CGFloat tabWidth = root.bounds.size.width / 4.0;
+    UIButton *mapTab = [self tabButtonWithTitle:@"Карта" imageName:@"tab-map.png" tag:0 action:@selector(selectMapTab) width:tabWidth];
+    UIButton *routesTab = [self tabButtonWithTitle:@"Маршруты" imageName:@"tab-routes.png" tag:1 action:@selector(showRoutes) width:tabWidth];
+    UIButton *settingsTab = [self tabButtonWithTitle:@"Настройки" imageName:@"tab-settings.png" tag:2 action:@selector(showSettings) width:tabWidth];
+    UIButton *favoritesTab = [self tabButtonWithTitle:@"Избранное" imageName:@"tab-favorites.png" tag:3 action:@selector(showFavorites) width:tabWidth];
+    self.bottomTabButtons = [NSArray arrayWithObjects:mapTab, routesTab, settingsTab, favoritesTab, nil];
+    for (UIButton *button in self.bottomTabButtons) [self.bottomTabBar addSubview:button];
+    [root addSubview:self.bottomTabBar];
+    [self styleBottomTabBar];
 
-    UIButton *menu = [self controlButtonWithTitle:@"Меню" action:@selector(showMenu)];
-    menu.frame = CGRectMake((root.bounds.size.width - 92) / 2, root.bounds.size.height - 54, 92, 44);
-    menu.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin;
-    [root addSubview:menu];
+    UIButton *zoomIn = [self controlButtonWithTitle:@"" action:@selector(zoomIn)];
+    zoomIn.tag = 700;
+    [self styleMapControl:zoomIn];
+    zoomIn.frame = CGRectMake(root.bounds.size.width - 52, root.bounds.size.height - 204, 44, 44);
+    zoomIn.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
+    [zoomIn setImage:[UIImage imageNamed:@"zoom-plus.png"] forState:UIControlStateNormal];
+    zoomIn.accessibilityLabel = @"Приблизить карту";
+    [root addSubview:zoomIn];
 
-    UIButton *location = [self controlButtonWithTitle:@"Место" action:@selector(showLocation)];
-    location.frame = CGRectMake(root.bounds.size.width - 84, root.bounds.size.height - 54, 74, 44);
+    UIButton *zoomOut = [self controlButtonWithTitle:@"" action:@selector(zoomOut)];
+    zoomOut.tag = 700;
+    [self styleMapControl:zoomOut];
+    zoomOut.frame = CGRectMake(root.bounds.size.width - 52, root.bounds.size.height - 156, 44, 44);
+    zoomOut.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
+    [zoomOut setImage:[UIImage imageNamed:@"zoom-minus.png"] forState:UIControlStateNormal];
+    zoomOut.accessibilityLabel = @"Отдалить карту";
+    [root addSubview:zoomOut];
+
+    UIButton *location = [self controlButtonWithTitle:@"" action:@selector(showLocation)];
+    location.tag = 700;
+    [self styleMapControl:location];
+    location.frame = CGRectMake(root.bounds.size.width - 52, root.bounds.size.height - 108, 44, 44);
     location.autoresizingMask = UIViewAutoresizingFlexibleTopMargin | UIViewAutoresizingFlexibleLeftMargin;
+    [location setImage:[UIImage imageNamed:@"location-button.png"] forState:UIControlStateNormal];
+    location.accessibilityLabel = @"Моё местоположение";
     [root addSubview:location];
 
     self.statusLabel = [[[UILabel alloc] initWithFrame:CGRectMake(20, 12, root.bounds.size.width - 40, 32)] autorelease];
@@ -138,31 +258,47 @@
     self.statusLabel.layer.masksToBounds = YES;
     self.statusLabel.text = @"Загрузка данных…";
     [root addSubview:self.statusLabel];
+
+    self.routeCloseButton = [self controlButtonWithTitle:@"" action:@selector(closeSelectedRoutes)];
+    self.routeCloseButton.tag = 700;
+    [self styleMapControl:self.routeCloseButton];
+    self.routeCloseButton.frame = CGRectMake(root.bounds.size.width - 44, 8, 36, 36);
+    self.routeCloseButton.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleBottomMargin;
+    [self.routeCloseButton setImage:[UIImage imageNamed:@"route-close.png"] forState:UIControlStateNormal];
+    self.routeCloseButton.accessibilityLabel = @"Закрыть выбранный маршрут и вернуть обычную карту";
+    self.routeCloseButton.hidden = YES;
+    [root addSubview:self.routeCloseButton];
     self.view = root;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
     UIBarButtonItem *search = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemSearch target:self action:@selector(showSearch)] autorelease];
+    UIBarButtonItem *refreshMap = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemRefresh target:self action:@selector(refreshMapNow)] autorelease];
     self.stationToggleButton = [UIButton buttonWithType:UIButtonTypeCustom];
     self.stationToggleButton.frame = CGRectMake(0, 0, 28, 28);
     self.stationToggleButton.imageView.contentMode = UIViewContentModeScaleAspectFit;
     [self.stationToggleButton setImage:[UIImage imageNamed:@"station-bus.png"] forState:UIControlStateNormal];
     [self.stationToggleButton addTarget:self action:@selector(toggleStationIcons) forControlEvents:UIControlEventTouchUpInside];
     UIBarButtonItem *stations = [[[UIBarButtonItem alloc] initWithCustomView:self.stationToggleButton] autorelease];
-    // The first item is rightmost: the small stop button therefore sits
-    // immediately to the left of Search.
-    self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:search, stations, nil];
+    self.vehicleFlagsButton = [[[UIBarButtonItem alloc] initWithTitle:@"ТС"
+                                                               style:UIBarButtonItemStylePlain
+                                                              target:self action:@selector(toggleVehicleFlags)] autorelease];
+    // First item is rightmost: Search, ТС, Refresh, then the stop toggle.
+    self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:search, self.vehicleFlagsButton, refreshMap, stations, nil];
     [self updateStationToggleButton];
-    self.navigationItem.leftBarButtonItem = [[[UIBarButtonItem alloc] initWithTitle:@"Город" style:UIBarButtonItemStylePlain target:self action:@selector(showCityMenu)] autorelease];
+    [self updateVehicleFlagsButton];
+    [self updateRouteCloseButton];
+    self.navigationItem.leftBarButtonItem = nil;
     [self applyMapType];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(storeReloaded:) name:STStoreDidReloadNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(cityChanged:) name:STStoreCityDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applyMapType) name:STMapTypeDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stationVisibilityChanged:) name:STStationVisibilityDidChangeNotification object:nil];
-    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(stationVisibilityChanged:) name:STStationSpacingDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(visibleRoutesChanged:) name:STVisibleRoutesDidChangeNotification object:nil];
     [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(themeChanged:) name:STThemeDidChangeNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidEnterBackground:) name:UIApplicationDidEnterBackgroundNotification object:nil];
+    [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(applicationDidBecomeActive:) name:UIApplicationDidBecomeActiveNotification object:nil];
     [self centerOnSelectedCityAnimated:NO];
     [[STStore sharedStore] loadInitialData:^(NSError *error) {
         if (error && [STStore sharedStore].stations.count == 0) STShowError(self, [error localizedDescription]);
@@ -180,9 +316,35 @@
     [self updateTitle];
     [self applyMapTheme];
     [self updateStationToggleButton];
-    [self.vehicleTimer invalidate];
-    self.vehicleTimer = [NSTimer scheduledTimerWithTimeInterval:5.0 target:self selector:@selector(refreshVehicles) userInfo:nil repeats:YES];
+    [self updateVehicleFlagsButton];
+    [self restartVehicleTimer];
     // Do not wait for the first timer tick when returning to the map.
+    [self refreshVehicles];
+}
+
+- (void)restartVehicleTimer {
+    [self.vehicleTimer invalidate];
+    self.vehicleTimer = [NSTimer timerWithTimeInterval:5.0 target:self selector:@selector(refreshVehicles) userInfo:nil repeats:YES];
+    [[NSRunLoop mainRunLoop] addTimer:self.vehicleTimer forMode:NSRunLoopCommonModes];
+}
+
+- (void)applicationDidEnterBackground:(NSNotification *)notification {
+    self.mapIsVisible = NO;
+    [self.vehicleTimer invalidate];
+    self.vehicleTimer = nil;
+    self.vehicleGeneration++;
+    self.vehicleRequestInFlight = NO;
+}
+
+- (void)applicationDidBecomeActive:(NSNotification *)notification {
+    if (self.navigationController.topViewController != self || !self.view.window) return;
+    self.mapIsVisible = YES;
+    NSTimeInterval now = CACurrentMediaTime();
+    if (self.lastVehicleUpdateAt <= 0.0 || now - self.lastVehicleUpdateAt > 7.0) {
+        self.snapNextVehicleUpdate = YES;
+        self.vehicleAnimationKey = 0;
+    }
+    [self restartVehicleTimer];
     [self refreshVehicles];
 }
 
@@ -215,6 +377,7 @@
         : (STIOS7ThemeEnabled() ? [UIColor colorWithWhite:1.0 alpha:0.94] : [UIColor colorWithWhite:1.0 alpha:0.9]);
     self.statusLabel.textColor = STDarkThemeEnabled() ? [UIColor whiteColor]
         : (STIOS7ThemeEnabled() ? [UIColor colorWithWhite:0.15 alpha:1.0] : [UIColor darkTextColor]);
+    [self styleBottomTabBar];
     if (STDarkThemeEnabled() && !self.darkMapOverlay) {
         self.darkMapOverlay = [[[STDarkMapOverlay alloc] init] autorelease];
         [self.mapView insertOverlay:self.darkMapOverlay atIndex:0];
@@ -228,8 +391,16 @@
     [self applyMapTheme];
     for (STAnnotation *annotation in self.vehicleAnnotations) {
         STVehicleAnnotationView *view = (STVehicleAnnotationView *)[self.mapView viewForAnnotation:annotation];
-        if ([view isKindOfClass:[STVehicleAnnotationView class]]) [view configureWithVehicle:annotation.data];
+        if ([view isKindOfClass:[STVehicleAnnotationView class]]) [view configureWithVehicle:annotation.data showFeatureFlag:[self vehicleFlagsEnabled]];
     }
+}
+
+- (void)updateRouteCloseButton {
+    BOOL visible = self.currentRoutes.count > 0;
+    self.routeCloseButton.hidden = !visible;
+    CGRect statusFrame = self.statusLabel.frame;
+    statusFrame.size.width = self.view.bounds.size.width - (visible ? 80.0 : 40.0);
+    self.statusLabel.frame = statusFrame;
 }
 
 - (void)clearDisplayedRoutes {
@@ -237,6 +408,16 @@
     if (self.routeOverlays.count) [self.mapView removeOverlays:self.routeOverlays];
     [self.routeOverlays removeAllObjects];
     self.currentRoutes = nil;
+    [self updateRouteCloseButton];
+}
+
+- (void)closeSelectedRoutes {
+    [self clearDisplayedRoutes];
+    [self clearVehicleAnnotations];
+    self.statusLabel.alpha = 1.0;
+    self.statusLabel.text = @"Обычная карта и включённые маршруты восстановлены";
+    [UIView animateWithDuration:0.3 delay:1.3 options:0 animations:^{ self.statusLabel.alpha = 0.0; } completion:nil];
+    [self refreshVehicles];
 }
 
 - (void)visibleRoutesChanged:(NSNotification *)notification {
@@ -258,13 +439,43 @@
     STSetStationIconsEnabled(!STStationIconsEnabled());
 }
 
+- (BOOL)vehicleFlagsEnabled {
+    return [[NSUserDefaults standardUserDefaults] boolForKey:@"STShowVehicleFlags"];
+}
+
+- (void)updateVehicleFlagsButton {
+    BOOL enabled = [self vehicleFlagsEnabled];
+    self.vehicleFlagsButton.style = enabled ? UIBarButtonItemStyleDone : UIBarButtonItemStylePlain;
+    self.vehicleFlagsButton.title = enabled ? @"ТС•" : @"ТС";
+    self.vehicleFlagsButton.accessibilityLabel = enabled ? @"Скрыть класс транспорта" : @"Показать класс транспорта";
+}
+
+- (void)toggleVehicleFlags {
+    BOOL enabled = ![self vehicleFlagsEnabled];
+    [[NSUserDefaults standardUserDefaults] setBool:enabled forKey:@"STShowVehicleFlags"];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+    [self updateVehicleFlagsButton];
+    self.statusLabel.alpha = 1.0;
+    self.statusLabel.text = enabled
+        ? @"♿ низкий пол · Wi‑Fi · ❄ A/C · К коляска"
+        : @"Флажки класса ТС скрыты";
+    [UIView animateWithDuration:0.3 delay:2.0 options:0 animations:^{ self.statusLabel.alpha = 0.0; } completion:nil];
+    for (STAnnotation *annotation in self.vehicleAnnotations) {
+        STVehicleAnnotationView *view = (STVehicleAnnotationView *)[self.mapView viewForAnnotation:annotation];
+        if ([view isKindOfClass:[STVehicleAnnotationView class]]) {
+            [view configureWithVehicle:annotation.data showFeatureFlag:enabled];
+        }
+    }
+}
+
 - (void)stationVisibilityChanged:(NSNotification *)notification {
     [self updateStationToggleButton];
     [self reloadStationAnnotations];
     self.statusLabel.alpha = 1.0;
-    self.statusLabel.text = STStationIconsEnabled()
-        ? [NSString stringWithFormat:@"Показано остановок: %lu", (unsigned long)self.stationAnnotations.count]
-        : @"Значки остановок скрыты";
+    self.statusLabel.text = !STStationIconsEnabled() ? @"Значки остановок скрыты"
+        : (self.stationAnnotations.count
+           ? [NSString stringWithFormat:@"Показано остановок: %lu", (unsigned long)self.stationAnnotations.count]
+           : @"Остановки появятся при приближении карты");
     [UIView animateWithDuration:0.3 delay:1.0 options:0 animations:^{ self.statusLabel.alpha = 0.0; } completion:nil];
 }
 
@@ -284,8 +495,7 @@
     [self updateTitle];
     [self reloadStationAnnotations];
     self.statusLabel.text = STStationIconsEnabled()
-        ? [NSString stringWithFormat:@"Остановок: %lu · маршрутов: %lu",
-           (unsigned long)[STStore sharedStore].stations.count,
+        ? [NSString stringWithFormat:@"Остановки при приближении · маршрутов: %lu",
            (unsigned long)[STStore sharedStore].routes.count]
         : [NSString stringWithFormat:@"Остановки скрыты · маршрутов: %lu",
            (unsigned long)[STStore sharedStore].routes.count];
@@ -301,52 +511,63 @@
     [self centerOnSelectedCityAnimated:NO];
 }
 
+- (CLLocationCoordinate2D)coordinateForStation:(NSDictionary *)station {
+    return CLLocationCoordinate2DMake(STCoordinateValue([station objectForKey:@"lat0"]), STCoordinateValue([station objectForKey:@"lon0"]));
+}
+
 - (void)reloadStationAnnotations {
-    if (self.stationAnnotations.count) [self.mapView removeAnnotations:self.stationAnnotations];
-    [self.stationAnnotations removeAllObjects];
-    if (!STStationIconsEnabled()) return;
-    NSInteger spacing = STStationSpacingMeters();
-    NSMutableDictionary *grid = spacing ? [NSMutableDictionary dictionary] : nil;
-    double metersPerPoint = spacing ? MKMetersPerMapPointAtLatitude([STStore sharedStore].selectedCityCoordinate.latitude) : 1.0;
-    double cellSize = spacing ? MAX(1.0, (double)spacing / metersPerPoint) : 1.0;
+    BOOL zoomedIn = self.mapView.region.span.latitudeDelta <= 0.055
+        && self.mapView.region.span.longitudeDelta <= 0.075;
+    if (!STStationIconsEnabled() || !zoomedIn) {
+        if (self.stationAnnotations.count) [self.mapView removeAnnotations:self.stationAnnotations];
+        [self.stationAnnotations removeAllObjects];
+        return;
+    }
+
+    MKMapRect visible = self.mapView.visibleMapRect;
+    MKMapRect padded = MKMapRectInset(visible, -visible.size.width * 0.08, -visible.size.height * 0.08);
+    NSMutableArray *candidates = [NSMutableArray array];
     for (NSDictionary *station in [STStore sharedStore].stations) {
-        CLLocationCoordinate2D coordinate = CLLocationCoordinate2DMake(STCoordinateValue([station objectForKey:@"lat0"]), STCoordinateValue([station objectForKey:@"lon0"]));
+        CLLocationCoordinate2D coordinate = [self coordinateForStation:station];
         if (!CLLocationCoordinate2DIsValid(coordinate) || coordinate.latitude == 0 || coordinate.longitude == 0) continue;
-        if (spacing) {
-            MKMapPoint point = MKMapPointForCoordinate(coordinate);
-            long long gridX = (long long)floor(point.x / cellSize);
-            long long gridY = (long long)floor(point.y / cellSize);
-            BOOL tooClose = NO;
-            NSInteger dx, dy;
-            for (dx = -1; dx <= 1 && !tooClose; dx++) {
-                for (dy = -1; dy <= 1 && !tooClose; dy++) {
-                    NSString *key = [NSString stringWithFormat:@"%lld:%lld", gridX + dx, gridY + dy];
-                    for (NSValue *storedValue in [grid objectForKey:key]) {
-                        MKMapPoint stored;
-                        [storedValue getValue:&stored];
-                        if (MKMetersBetweenMapPoints(point, stored) < (double)spacing) {
-                            tooClose = YES;
-                            break;
-                        }
-                    }
-                }
-            }
-            if (tooClose) continue;
-            NSString *key = [NSString stringWithFormat:@"%lld:%lld", gridX, gridY];
-            NSMutableArray *bucket = [grid objectForKey:key];
-            if (!bucket) {
-                bucket = [NSMutableArray array];
-                [grid setObject:bucket forKey:key];
-            }
-            [bucket addObject:[NSValue value:&point withObjCType:@encode(MKMapPoint)]];
+        if (MKMapRectContainsPoint(padded, MKMapPointForCoordinate(coordinate))) [candidates addObject:station];
+    }
+    if (candidates.count > 160) {
+        MKMapPoint center = MKMapPointForCoordinate(self.mapView.region.center);
+        [candidates sortUsingComparator:^NSComparisonResult(id first, id second) {
+            double a = MKMetersBetweenMapPoints(center, MKMapPointForCoordinate([self coordinateForStation:first]));
+            double b = MKMetersBetweenMapPoints(center, MKMapPointForCoordinate([self coordinateForStation:second]));
+            return a < b ? NSOrderedAscending : (a > b ? NSOrderedDescending : NSOrderedSame);
+        }];
+        [candidates removeObjectsInRange:NSMakeRange(160, candidates.count - 160)];
+    }
+
+    NSMutableDictionary *existing = [NSMutableDictionary dictionary];
+    for (STAnnotation *annotation in self.stationAnnotations) {
+        [existing setObject:annotation forKey:[NSNumber numberWithInteger:STInteger([annotation.data objectForKey:@"id"])]];
+    }
+    NSMutableArray *additions = [NSMutableArray array];
+    for (NSDictionary *station in candidates) {
+        NSNumber *identifier = [NSNumber numberWithInteger:STInteger([station objectForKey:@"id"])];
+        if ([existing objectForKey:identifier]) {
+            [existing removeObjectForKey:identifier];
+            continue;
         }
-        STAnnotation *annotation = [STAnnotation annotationWithCoordinate:coordinate
+        STAnnotation *annotation = [STAnnotation annotationWithCoordinate:[self coordinateForStation:station]
                                                                    title:STString([station objectForKey:@"name"])
                                                                 subtitle:STString([station objectForKey:@"description"])
                                                                     data:station kind:STAnnotationKindStation];
-        [self.stationAnnotations addObject:annotation];
+        [additions addObject:annotation];
     }
-    [self.mapView addAnnotations:self.stationAnnotations];
+    NSArray *removals = [existing allValues];
+    if (removals.count) {
+        [self.mapView removeAnnotations:removals];
+        [self.stationAnnotations removeObjectsInArray:removals];
+    }
+    if (additions.count) {
+        [self.stationAnnotations addObjectsFromArray:additions];
+        [self.mapView addAnnotations:additions];
+    }
 }
 
 - (void)showMenu {
@@ -354,11 +575,34 @@
     [self.navigationController pushViewController:menu animated:YES];
 }
 
+- (void)selectMapTab {
+    [self refreshVehicles];
+}
+
 - (void)showRoutes {
     STRoutesViewController *routes = [[[STRoutesViewController alloc] initWithFavoritesOnly:NO] autorelease];
     routes.delegate = self;
     [self.navigationController pushViewController:routes animated:YES];
 }
+
+- (void)showFavorites {
+    STFavoritesViewController *favorites = [[[STFavoritesViewController alloc] initWithRouteDelegate:self] autorelease];
+    [self.navigationController pushViewController:favorites animated:YES];
+}
+
+- (void)showSettings {
+    [self.navigationController pushViewController:[[[STSettingsViewController alloc] init] autorelease] animated:YES];
+}
+
+- (void)zoomByFactor:(double)factor {
+    MKCoordinateRegion region = self.mapView.region;
+    region.span.latitudeDelta = MIN(80.0, MAX(0.0015, region.span.latitudeDelta * factor));
+    region.span.longitudeDelta = MIN(160.0, MAX(0.0015, region.span.longitudeDelta * factor));
+    [self.mapView setRegion:region animated:YES];
+}
+
+- (void)zoomIn { [self zoomByFactor:0.55]; }
+- (void)zoomOut { [self zoomByFactor:1.8]; }
 
 - (void)showSearch {
     STStationListViewController *search = [[[STStationListViewController alloc] initWithMode:STStationListModeAll location:self.currentLocation] autorelease];
@@ -404,6 +648,18 @@
     }];
 }
 
+- (void)refreshMapNow {
+    self.statusLabel.alpha = 1.0;
+    self.statusLabel.text = @"Обновление карты…";
+    [self reloadStationAnnotations];
+    self.vehicleGeneration++;
+    self.vehicleRequestInFlight = NO;
+    self.vehicleAnimationKey = 0;
+    self.snapNextVehicleUpdate = YES;
+    [self refreshVehicles];
+    [UIView animateWithDuration:0.3 delay:1.0 options:0 animations:^{ self.statusLabel.alpha = 0.0; } completion:nil];
+}
+
 - (NSString *)visibleRouteIDs {
     NSMutableArray *ids = [NSMutableArray array];
     if (self.currentRoutes.count) {
@@ -427,7 +683,10 @@
     MKAnnotationView *view = [self.mapView viewForAnnotation:annotation];
     CALayer *presentation = (CALayer *)[view.layer presentationLayer];
     if (view && presentation) {
-        return [self.mapView convertPoint:presentation.position toCoordinateFromView:view.superview];
+        CGPoint point = presentation.position;
+        point.x -= view.centerOffset.x;
+        point.y -= view.centerOffset.y;
+        return [self.mapView convertPoint:point toCoordinateFromView:view.superview];
     }
     return annotation.coordinate;
 }
@@ -496,11 +755,17 @@
     CALayer *presentation = (CALayer *)[view.layer presentationLayer];
     CGPoint currentPoint = presentation ? presentation.position
         : [self.mapView convertCoordinate:annotation.coordinate toPointToView:view.superview];
+    if (!presentation) {
+        currentPoint.x += view.centerOffset.x;
+        currentPoint.y += view.centerOffset.y;
+    }
     [values addObject:[NSValue valueWithCGPoint:currentPoint]];
     for (NSValue *coordinateValue in annotation.movementPath) {
         CLLocationCoordinate2D coordinate;
         [coordinateValue getValue:&coordinate];
         CGPoint point = [self.mapView convertCoordinate:coordinate toPointToView:view.superview];
+        point.x += view.centerOffset.x;
+        point.y += view.centerOffset.y;
         [values addObject:[NSValue valueWithCGPoint:point]];
     }
 
@@ -627,11 +892,11 @@
             annotation.coordinate = finalCoordinate;
             [annotation finishMovement];
         } else if (path.count) {
-            [annotation beginMovementAlongPath:path weights:weights duration:6.2 atTime:time];
+            [annotation beginMovementAlongPath:path weights:weights duration:6.8 atTime:time];
         }
 
         STVehicleAnnotationView *view = (STVehicleAnnotationView *)[self.mapView viewForAnnotation:annotation];
-        if ([view isKindOfClass:[STVehicleAnnotationView class]]) [view configureWithVehicle:vehicle];
+        if ([view isKindOfClass:[STVehicleAnnotationView class]]) [view configureWithVehicle:vehicle showFeatureFlag:[self vehicleFlagsEnabled]];
         NSInteger animationKey = STInteger([vehicle objectForKey:@"anim_key"]);
         if (animationKey > self.vehicleAnimationKey) self.vehicleAnimationKey = animationKey;
     }
@@ -691,7 +956,7 @@
     if (generation != self.routeLoadGeneration) return;
     if (index >= self.currentRoutes.count) {
         if (!MKMapRectIsNull(visibleRect)) {
-            [self.mapView setVisibleMapRect:visibleRect edgePadding:UIEdgeInsetsMake(45, 25, 70, 25) animated:YES];
+            [self.mapView setVisibleMapRect:visibleRect edgePadding:UIEdgeInsetsMake(45, 25, 92, 25) animated:YES];
         }
         NSDictionary *route = [self.currentRoutes objectAtIndex:0];
         self.statusLabel.text = [NSString stringWithFormat:@"%@ №%@ · линий: %lu",
@@ -729,6 +994,7 @@
 - (void)routesViewController:(STRoutesViewController *)controller selectedRoute:(NSDictionary *)route {
     [self clearDisplayedRoutes];
     self.currentRoutes = [self routesMatchingRoute:route];
+    [self updateRouteCloseButton];
     [self clearVehicleAnnotations];
     self.statusLabel.alpha = 1.0;
     self.statusLabel.text = [NSString stringWithFormat:@"Загрузка всех линий №%@…", STString([route objectForKey:@"number"])];
@@ -743,8 +1009,32 @@
     [self refreshVehicles];
 }
 
+- (UIImage *)smallStationImageForType:(NSInteger)type {
+    static UIImage *busImage = nil;
+    static UIImage *tramImage = nil;
+    UIImage **cached = type == 0 ? &busImage : &tramImage;
+    if (!*cached) {
+        UIImage *source = [UIImage imageNamed:(type == 0 ? @"station-bus.png" : @"station-tram.png")];
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(20, 20), NO, 0.0);
+        [source drawInRect:CGRectMake(0, 0, 20, 20)];
+        *cached = [UIGraphicsGetImageFromCurrentImageContext() retain];
+        UIGraphicsEndImageContext();
+    }
+    return *cached;
+}
+
 - (MKAnnotationView *)mapView:(MKMapView *)mapView viewForAnnotation:(id<MKAnnotation>)annotation {
-    if ([annotation isKindOfClass:[MKUserLocation class]]) return nil;
+    if ([annotation isKindOfClass:[MKUserLocation class]]) {
+        static NSString *positionID = @"MyPositionAnnotation";
+        MKAnnotationView *positionView = [mapView dequeueReusableAnnotationViewWithIdentifier:positionID];
+        if (!positionView) {
+            positionView = [[[MKAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:positionID] autorelease];
+            positionView.canShowCallout = NO;
+        }
+        positionView.annotation = annotation;
+        positionView.image = [UIImage imageNamed:@"navposition.png"];
+        return positionView;
+    }
     STAnnotation *item = (STAnnotation *)annotation;
     if (item.kind == STAnnotationKindVehicle) {
         static NSString *vehicleID = @"VehicleAnnotation";
@@ -753,7 +1043,7 @@
             view = [[[STVehicleAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:vehicleID] autorelease];
         }
         view.annotation = annotation;
-        [view configureWithVehicle:item.data];
+        [view configureWithVehicle:item.data showFeatureFlag:[self vehicleFlagsEnabled]];
         return view;
     }
     static NSString *stationID = @"StationAnnotation";
@@ -761,11 +1051,11 @@
     if (!view) {
         view = [[[MKAnnotationView alloc] initWithAnnotation:annotation reuseIdentifier:stationID] autorelease];
         view.canShowCallout = YES;
-        view.centerOffset = CGPointMake(0, -12);
+        view.centerOffset = CGPointMake(0, -8);
         view.rightCalloutAccessoryView = [UIButton buttonWithType:UIButtonTypeDetailDisclosure];
     }
     view.annotation = annotation;
-    view.image = [UIImage imageNamed:(STInteger([item.data objectForKey:@"type"]) == 0 ? @"station-bus.png" : @"station-tram.png")];
+    view.image = [self smallStationImageForType:STInteger([item.data objectForKey:@"type"])];
     return view;
 }
 
@@ -788,21 +1078,26 @@
 - (void)mapView:(MKMapView *)mapView regionWillChangeAnimated:(BOOL)animated {
     // The model coordinates already point at the newest server positions.
     // Cancel visual paths while the map itself is being transformed.
+    self.snapNextVehicleUpdate = YES;
     for (STAnnotation *annotation in self.vehicleAnnotations) {
         MKAnnotationView *view = [mapView viewForAnnotation:annotation];
+        CLLocationCoordinate2D visibleCoordinate = [self visualCoordinateForAnnotation:annotation];
         [view.layer removeAnimationForKey:@"STVehicleMovement"];
+        annotation.coordinate = visibleCoordinate;
     }
 }
 
 - (void)mapView:(MKMapView *)mapView regionDidChangeAnimated:(BOOL)animated {
-    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshVehiclesForChangedRegion) object:nil];
-    [self performSelector:@selector(refreshVehiclesForChangedRegion) withObject:nil afterDelay:0.25];
+    [NSObject cancelPreviousPerformRequestsWithTarget:self selector:@selector(refreshMapForChangedRegion) object:nil];
+    [self performSelector:@selector(refreshMapForChangedRegion) withObject:nil afterDelay:0.25];
 }
 
-- (void)refreshVehiclesForChangedRegion {
+- (void)refreshMapForChangedRegion {
+    [self reloadStationAnnotations];
     self.vehicleGeneration++;
     self.vehicleRequestInFlight = NO;
     self.vehicleAnimationKey = 0;
+    self.snapNextVehicleUpdate = YES;
     [self refreshVehicles];
 }
 
@@ -834,6 +1129,10 @@
     [_currentLocation release];
     [_statusLabel release];
     [_stationToggleButton release];
+    [_vehicleFlagsButton release];
+    [_bottomTabBar release];
+    [_bottomTabButtons release];
+    [_routeCloseButton release];
     [_vehicleTimer invalidate];
     [_vehicleTimer release];
     [super dealloc];

@@ -30,3 +30,81 @@ images = [
   { name = "Default@2x.png", width = 320, height = 480, scale = 2 },
   { name = "Default-568h@2x.png", width = 320, height = 568, scale = 2 },
 ]
+
+[image.vehicle-bus]
+from = "ios6/art/original-ios/vehicle-bus.png"
+to = "ios6/resources/vehicle-bus.png"
+size = [44, 44]
+scales = [1, 2]
+
+[image.vehicle-trolley]
+from = "ios6/art/original-ios/vehicle-trolley.png"
+to = "ios6/resources/vehicle-trolley.png"
+size = [44, 44]
+scales = [1, 2]
+
+[image.vehicle-tram]
+from = "ios6/art/original-ios/vehicle-tram.png"
+to = "ios6/resources/vehicle-tram.png"
+size = [44, 44]
+scales = [1, 2]
+
+[image.vehicle-minibus]
+from = "ios6/art/original-ios/vehicle-minibus.png"
+to = "ios6/resources/vehicle-minibus.png"
+size = [44, 44]
+scales = [1, 2]
+
+[image.navposition]
+from = "ios6/art/original-ios/navposition.png"
+to = "ios6/resources/navposition.png"
+size = [40, 40]
+scales = [1, 2]
+
+[image.location-button]
+from = "ios6/art/original-ios/location-button.png"
+to = "ios6/resources/location-button.png"
+size = [44, 44]
+scales = [1, 2]
+
+[image.route-close]
+from = "ios6/art/original-ios/route-close.png"
+to = "ios6/resources/route-close.png"
+size = [28, 28]
+scales = [1, 2]
+
+[image.zoom-plus]
+from = "ios6/art/original-ios/zoom-plus.png"
+to = "ios6/resources/zoom-plus.png"
+size = [36, 36]
+scales = [1, 2]
+
+[image.zoom-minus]
+from = "ios6/art/original-ios/zoom-minus.png"
+to = "ios6/resources/zoom-minus.png"
+size = [36, 36]
+scales = [1, 2]
+
+[image.tab-map]
+from = "ios6/art/original-ios/tab-map.png"
+to = "ios6/resources/tab-map.png"
+size = [24, 24]
+scales = [1, 2]
+
+[image.tab-routes]
+from = "ios6/art/original-ios/tab-routes.png"
+to = "ios6/resources/tab-routes.png"
+size = [24, 24]
+scales = [1, 2]
+
+[image.tab-favorites]
+from = "ios6/art/original-ios/tab-favorites.png"
+to = "ios6/resources/tab-favorites.png"
+size = [24, 24]
+scales = [1, 2]
+
+[image.tab-settings]
+from = "ios6/art/original-ios/tab-settings.png"
+to = "ios6/resources/tab-settings.png"
+size = [24, 24]
+scales = [1, 2]
